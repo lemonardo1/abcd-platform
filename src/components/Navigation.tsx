@@ -1,18 +1,43 @@
 "use client"
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Button } from "@/components/ui/button"
 import { useAuth } from '@/contexts/AuthContext'
 import AuthModal from '@/components/auth/AuthModal'
-import { User, LogOut } from 'lucide-react'
+import { User, LogOut, Coins } from 'lucide-react'
 import Link from 'next/link'
 import { toast } from 'sonner'
+import { getUserTokenBalance } from '@/lib/api'
 
 export default function Navigation() {
   const { user, signOut, loading } = useAuth()
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login')
   const [isSigningOut, setIsSigningOut] = useState(false)
+  const [tokenBalance, setTokenBalance] = useState(0)
+  const [tokenLoading, setTokenLoading] = useState(false)
+
+  // 사용자가 로그인했을 때 토큰 잔액 로드
+  useEffect(() => {
+    if (user && !loading) {
+      loadTokenBalance()
+    } else {
+      setTokenBalance(0)
+    }
+  }, [user, loading])
+
+  const loadTokenBalance = async () => {
+    try {
+      setTokenLoading(true)
+      const balance = await getUserTokenBalance()
+      setTokenBalance(balance.balance)
+    } catch (error) {
+      console.error('토큰 잔액 로드 오류:', error)
+      setTokenBalance(0)
+    } finally {
+      setTokenLoading(false)
+    }
+  }
 
   const handleSignOut = async () => {
     if (isSigningOut) return // 중복 클릭 방지
@@ -63,6 +88,21 @@ export default function Navigation() {
                 <div className="w-20 h-9 bg-gray-200 animate-pulse rounded"></div>
               ) : user ? (
                 <div className="flex items-center space-x-3">
+                  {/* 토큰 잔액 표시 */}
+                  <Link 
+                    href="/mypage" 
+                    className="flex items-center space-x-2 px-3 py-1 bg-yellow-50 text-yellow-700 rounded-full hover:bg-yellow-100 transition-colors"
+                  >
+                    <Coins className="h-4 w-4" />
+                    <span className="text-sm font-medium">
+                      {tokenLoading ? (
+                        <div className="w-8 h-4 bg-yellow-200 animate-pulse rounded"></div>
+                      ) : (
+                        `${tokenBalance.toLocaleString()}`
+                      )}
+                    </span>
+                  </Link>
+                  
                   <div className="flex items-center space-x-2 text-sm text-gray-700">
                     <User className="h-4 w-4" />
                     <span className="hidden sm:block">

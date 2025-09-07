@@ -1,20 +1,26 @@
 "use client"
 
-import { listIdeas, likeIdea } from "@/lib/api"
+import { listIdeas, getUserTokenBalance } from "@/lib/api"
 import { useEffect, useState } from "react"
-import { Card, CardContent } from "@/components/ui/card"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
-import { Heart, Plus, Search } from "lucide-react"
+import { TrendingUp, Plus, Search, Coins, Users, BarChart3, DollarSign } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
+import { useAuth } from "@/contexts/AuthContext"
+import InvestmentModal from "@/components/InvestmentModal"
 
 export default function IdeasPage() {
+  const { user } = useAuth()
   const [query, setQuery] = useState("")
   const [ideas, setIdeas] = useState<any[]>([])
   const [visible, setVisible] = useState(12)
   const [loading, setLoading] = useState(false)
+  const [investmentModalOpen, setInvestmentModalOpen] = useState(false)
+  const [selectedIdea, setSelectedIdea] = useState<any>(null)
+  const [tokenBalance, setTokenBalance] = useState(0)
 
   async function loadIdeas() {
     try {
@@ -30,19 +36,41 @@ export default function IdeasPage() {
     }
   }
 
-  useEffect(() => {
-    loadIdeas()
-  }, [])
-
-  const handleLike = async (ideaId: string) => {
-    try {
-      await likeIdea(ideaId)
-      await loadIdeas()
-    } catch (error) {
-      console.error("좋아요 오류:", error)
-      toast.error("좋아요 처리에 실패했습니다.")
+  async function loadTokenBalance() {
+    if (user) {
+      try {
+        const balance = await getUserTokenBalance()
+        setTokenBalance(balance.balance)
+      } catch (error) {
+        console.error('토큰 잔액 로드 오류:', error)
+      }
     }
   }
+
+  useEffect(() => {
+    loadIdeas()
+    loadTokenBalance()
+  }, [user])
+
+  const handleInvestClick = (idea: any) => {
+    if (!user) {
+      toast.error('로그인이 필요합니다')
+      return
+    }
+    setSelectedIdea(idea)
+    setInvestmentModalOpen(true)
+  }
+
+  const handleInvestmentComplete = async () => {
+    await loadIdeas()
+    await loadTokenBalance()
+  }
+
+  // 통계 계산
+  const totalInvestment = ideas.reduce((sum, idea) => sum + (idea.total_investment || 0), 0)
+  const totalIdeas = ideas.length
+  const averageInvestment = totalIdeas > 0 ? Math.round(totalInvestment / totalIdeas) : 0
+  const topIdeas = [...ideas].sort((a, b) => (b.total_investment || 0) - (a.total_investment || 0)).slice(0, 3)
 
   const visibleIdeas = ideas.slice(0, visible)
   const hasMore = visible < ideas.length
@@ -52,15 +80,65 @@ export default function IdeasPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">아이디어 둘러보기</h1>
-          <p className="text-gray-600">혁신적인 아이디어들을 확인하고 팀에 참여해보세요</p>
+          <h1 className="text-3xl font-bold text-gray-900 flex items-center gap-3">
+            <BarChart3 className="h-8 w-8 text-blue-600" />
+            아이디어 투자 대시보드
+          </h1>
+          <p className="text-gray-600 mt-1">혁신적인 아이디어에 투자하고 성장을 함께하세요</p>
         </div>
         <Link href="/ideas/new">
-          <Button>
+          <Button className="bg-blue-600 hover:bg-blue-700">
             <Plus className="h-4 w-4 mr-2" />
             새 아이디어 제출
           </Button>
         </Link>
+      </div>
+
+      {/* 통계 대시보드 */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">총 투자액</CardTitle>
+            <DollarSign className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalInvestment.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">토큰</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">전체 아이디어</CardTitle>
+            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{totalIdeas}</div>
+            <p className="text-xs text-muted-foreground">개</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">평균 투자액</CardTitle>
+            <BarChart3 className="h-4 w-4 text-muted-foreground" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{averageInvestment.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">토큰</p>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">내 토큰</CardTitle>
+            <Coins className="h-4 w-4 text-yellow-600" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-yellow-600">{tokenBalance.toLocaleString()}</div>
+            <p className="text-xs text-muted-foreground">토큰</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Search */}
@@ -83,7 +161,7 @@ export default function IdeasPage() {
       {/* Ideas Grid */}
       <div className="grid sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
         {visibleIdeas.map((idea) => (
-          <Card key={idea.id} className="hover:shadow-md transition-shadow">
+          <Card key={idea.id} className="hover:shadow-lg transition-all duration-200 border-l-4 border-l-blue-200">
             <CardContent className="p-4 space-y-3">
               <div>
                 <h3 className="font-semibold text-gray-900 line-clamp-2">
@@ -124,19 +202,30 @@ export default function IdeasPage() {
                 </div>
               )}
 
-              <div className="flex items-center justify-between pt-2 border-t">
-                <div className="text-xs text-gray-500">
-                  {idea.stage} · 좋아요 {(idea.like_user_ids || []).length}
+              <div className="pt-3 border-t space-y-2">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="text-gray-500">{idea.stage}</span>
+                  <div className="flex items-center gap-3 text-gray-600">
+                    <span className="flex items-center gap-1">
+                      <Coins className="h-3 w-3 text-yellow-600" />
+                      {(idea.total_investment || 0).toLocaleString()}
+                    </span>
+                    <span className="flex items-center gap-1">
+                      <Users className="h-3 w-3" />
+                      {idea.investor_count || 0}
+                    </span>
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => handleLike(idea.id)}
-                    className="h-8 px-2"
+                    onClick={() => handleInvestClick(idea)}
+                    className="h-8 px-2 flex-1 text-green-600 border-green-200 hover:bg-green-50"
+                    disabled={!user}
                   >
-                    <Heart className="h-3 w-3 mr-1" />
-                    좋아요
+                    <TrendingUp className="h-3 w-3 mr-1" />
+                    투자하기
                   </Button>
                   <Link href={`/teams/new?ideaId=${idea.id}`}>
                     <Button size="sm" className="h-8 px-2">
@@ -178,6 +267,16 @@ export default function IdeasPage() {
         <div className="text-center text-sm text-gray-500">
           모든 아이디어를 확인했습니다
         </div>
+      )}
+
+      {/* 투자 모달 */}
+      {selectedIdea && (
+        <InvestmentModal
+          isOpen={investmentModalOpen}
+          onClose={() => setInvestmentModalOpen(false)}
+          idea={selectedIdea}
+          onInvestmentComplete={handleInvestmentComplete}
+        />
       )}
     </div>
   )

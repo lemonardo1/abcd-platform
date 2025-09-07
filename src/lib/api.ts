@@ -32,7 +32,13 @@ export async function addIdea(idea: {
 export async function listIdeas(query?: string) {
   let queryBuilder = supabase
     .from('ideas')
-    .select('*')
+    .select(`
+      *,
+      idea_investments (
+        amount,
+        user_id
+      )
+    `)
     .order('created_at', { ascending: false })
 
   if (query) {
@@ -41,7 +47,22 @@ export async function listIdeas(query?: string) {
 
   const { data, error } = await queryBuilder
   if (error) throw error
-  return data || []
+  
+  // 투자 정보를 계산하여 추가
+  const ideasWithInvestments = (data || []).map(idea => {
+    const investments = idea.idea_investments || []
+    const totalInvestment = investments.reduce((sum: number, inv: any) => sum + inv.amount, 0)
+    const investorCount = investments.length
+    
+    return {
+      ...idea,
+      total_investment: totalInvestment,
+      investor_count: investorCount,
+      investments: investments
+    }
+  })
+  
+  return ideasWithInvestments
 }
 
 export async function likeIdea(ideaId: string) {
@@ -147,4 +168,162 @@ export async function joinTeam(teamId: string, skills: string[]) {
 
   if (error) throw error
   return data
+}
+
+// 토큰 관련 API
+export async function getUserTokenBalance() {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('로그인이 필요합니다')
+
+  const { data, error } = await supabase
+    .from('user_tokens')
+    .select('balance')
+    .eq('user_id', user.id)
+    .single()
+
+  if (error) {
+    // 토큰 데이터가 없는 경우 0 반환
+    if (error.code === 'PGRST116') {
+      return { balance: 0 }
+    }
+    throw error
+  }
+  
+  return data
+}
+
+export async function getTokenTransactions(limit = 50) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('로그인이 필요합니다')
+
+  const { data, error } = await supabase
+    .from('token_transactions')
+    .select('*')
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (error) throw error
+  return data || []
+}
+
+export async function addTokenTransaction(
+  amount: number, 
+  transactionType: string, 
+  description?: string, 
+  referenceId?: string
+) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('로그인이 필요합니다')
+
+  const { data, error } = await supabase
+    .from('token_transactions')
+    .insert({
+      user_id: user.id,
+      amount,
+      transaction_type: transactionType,
+      description,
+      reference_id: referenceId
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function useTokens(amount: number, description: string, referenceId?: string) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('로그인이 필요합니다')
+
+  // 현재 잔액 확인
+  const balance = await getUserTokenBalance()
+  if (balance.balance < amount) {
+    throw new Error('토큰 잔액이 부족합니다')
+  }
+
+  // 토큰 사용 트랜잭션 추가 (음수로)
+  return await addTokenTransaction(-amount, 'usage', description, referenceId)
+}
+
+// 아이디어 투자 관련 API
+export async function investInIdea(ideaId: string, amount: number) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('로그인이 필요합니다')
+
+  // 현재 잔액 확인
+  const balance = await getUserTokenBalance()
+  if (balance.balance < amount) {
+    throw new Error('토큰 잔액이 부족합니다')
+  }
+
+  // 기존 투자 확인
+  const { data: existingInvestment } = await supabase
+    .from('idea_investments')
+    .select('*')
+    .eq('idea_id', ideaId)
+    .eq('user_id', user.id)
+    .single()
+
+  if (existingInvestment) {
+    // 기존 투자가 있으면 업데이트
+    const { error: updateError } = await supabase
+      .from('idea_investments')
+      .update({ amount: existingInvestment.amount + amount })
+      .eq('id', existingInvestment.id)
+
+    if (updateError) throw updateError
+  } else {
+    // 새로운 투자
+    const { error: insertError } = await supabase
+      .from('idea_investments')
+      .insert({
+        idea_id: ideaId,
+        user_id: user.id,
+        amount
+      })
+
+    if (insertError) throw insertError
+  }
+
+  // 토큰 사용 트랜잭션 추가
+  await addTokenTransaction(-amount, 'investment', `아이디어 투자`, ideaId)
+  
+  return { success: true }
+}
+
+export async function getIdeaInvestments(ideaId: string) {
+  const { data, error } = await supabase
+    .from('idea_investments')
+    .select(`
+      *,
+      auth.users (
+        email
+      )
+    `)
+    .eq('idea_id', ideaId)
+    .order('amount', { ascending: false })
+
+  if (error) throw error
+  return data || []
+}
+
+export async function getUserInvestments() {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('로그인이 필요합니다')
+
+  const { data, error } = await supabase
+    .from('idea_investments')
+    .select(`
+      *,
+      ideas (
+        title,
+        domain
+      )
+    `)
+    .eq('user_id', user.id)
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return data || []
 }

@@ -113,6 +113,81 @@ export type Database = {
           status?: string
         }
       }
+      user_tokens: {
+        Row: {
+          id: string
+          user_id: string
+          balance: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          balance?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          balance?: number
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      token_transactions: {
+        Row: {
+          id: string
+          user_id: string
+          amount: number
+          transaction_type: string
+          description: string | null
+          reference_id: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          amount: number
+          transaction_type: string
+          description?: string | null
+          reference_id?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          amount?: number
+          transaction_type?: string
+          description?: string | null
+          reference_id?: string | null
+          created_at?: string
+        }
+      }
+      idea_investments: {
+        Row: {
+          id: string
+          idea_id: string
+          user_id: string
+          amount: number
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          idea_id: string
+          user_id: string
+          amount: number
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          idea_id?: string
+          user_id?: string
+          amount?: number
+          created_at?: string
+        }
+      }
     }
   }
 }

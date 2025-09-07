@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { User, Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
+import { addTokenTransaction } from '@/lib/api'
 
 interface AuthContextType {
   user: User | null
@@ -70,11 +71,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [])
 
   const signUp = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email,
       password,
     })
     if (error) throw error
+
+    // 회원가입 성공 시, 사용자가 확인되면 토큰 지급
+    // 이메일 확인이 필요한 경우는 trigger_handle_new_user에서 처리됨
+    // 이메일 확인이 불필요한 경우 여기서 직접 처리
+    if (data.user && !data.user.email_confirmed_at) {
+      console.log('이메일 확인 필요 - 토큰은 확인 후 자동 지급됩니다')
+    } else if (data.user) {
+      try {
+        // 즉시 확인된 사용자의 경우 토큰 지급
+        await addTokenTransaction(1000, 'signup_bonus', '회원가입 축하 토큰')
+        console.log('회원가입 토큰 1000원 지급 완료')
+      } catch (tokenError) {
+        console.error('토큰 지급 오류:', tokenError)
+        // 토큰 지급 실패해도 회원가입은 성공으로 처리
+      }
+    }
   }
 
   const signIn = async (email: string, password: string) => {

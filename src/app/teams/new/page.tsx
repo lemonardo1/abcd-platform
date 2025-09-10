@@ -84,7 +84,7 @@ export default function NewTeamPage() {
         required_skills: requiredSkills
       })
       toast.success("팀이 성공적으로 생성되었습니다!")
-      router.push(`/teams/${team.id}`)
+      router.push("/teams")
     } catch (error) {
       console.error("팀 생성 오류:", error)
       toast.error("팀 생성에 실패했습니다.")

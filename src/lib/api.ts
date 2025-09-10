@@ -141,19 +141,60 @@ export async function listTeams() {
       ideas (
         title,
         domain,
-        problem
+        problem,
+        ai_solution
+      ),
+      team_members (
+        user_id,
+        role,
+        status
       )
     `)
     .order('created_at', { ascending: false })
 
   if (error) throw error
-  return data || []
+  
+  // 멤버 정보를 정리해서 반환
+  const teamsWithMembers = (data || []).map(team => ({
+    ...team,
+    members: team.team_members?.filter((member: any) => member.status === '승인됨') || []
+  }))
+  
+  return teamsWithMembers
 }
 
-export async function joinTeam(teamId: string, skills: string[]) {
+export async function joinTeam(teamId: string, skills: string[] = []) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) throw new Error('로그인이 필요합니다')
 
+  // 이미 참여 중인지 확인
+  const { data: existingMember } = await supabase
+    .from('team_members')
+    .select('*')
+    .eq('team_id', teamId)
+    .eq('user_id', user.id)
+    .single()
+
+  if (existingMember) {
+    throw new Error('이미 참여 중인 팀입니다')
+  }
+
+  // 팀 정보 확인
+  const { data: team } = await supabase
+    .from('teams')
+    .select('current_members, max_members, status')
+    .eq('id', teamId)
+    .single()
+
+  if (!team) throw new Error('팀을 찾을 수 없습니다')
+  if (team.current_members >= team.max_members) {
+    throw new Error('팀 인원이 가득 찼습니다')
+  }
+  if (team.status !== '모집중') {
+    throw new Error('모집이 마감된 팀입니다')
+  }
+
+  // 팀 멤버로 추가
   const { data, error } = await supabase
     .from('team_members')
     .insert({
@@ -161,12 +202,19 @@ export async function joinTeam(teamId: string, skills: string[]) {
       user_id: user.id,
       role: '팀원',
       skills: skills,
-      status: '대기중'
+      status: '승인됨'
     })
     .select()
     .single()
 
   if (error) throw error
+
+  // 팀의 current_members 증가
+  await supabase
+    .from('teams')
+    .update({ current_members: team.current_members + 1 })
+    .eq('id', teamId)
+
   return data
 }
 

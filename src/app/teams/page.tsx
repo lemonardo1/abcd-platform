@@ -8,10 +8,13 @@ import { Badge } from "@/components/ui/badge"
 import { Users, Plus, MapPin } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
+import TeamDetailModal from "@/components/TeamDetailModal"
 
 export default function TeamsPage() {
   const [teams, setTeams] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
+  const [selectedTeam, setSelectedTeam] = useState<any>(null)
+  const [modalOpen, setModalOpen] = useState(false)
 
   async function loadTeams() {
     try {
@@ -29,6 +32,20 @@ export default function TeamsPage() {
     loadTeams()
   }, [])
 
+  const handleTeamClick = (team: any) => {
+    setSelectedTeam(team)
+    setModalOpen(true)
+  }
+
+  const handleModalClose = () => {
+    setModalOpen(false)
+    setSelectedTeam(null)
+  }
+
+  const handleTeamUpdated = () => {
+    loadTeams() // 팀 목록 새로고침
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -45,10 +62,10 @@ export default function TeamsPage() {
           <h1 className="text-2xl font-bold text-gray-900">팀 둘러보기</h1>
           <p className="text-gray-600">활발히 활동 중인 팀들을 확인하고 참여해보세요</p>
         </div>
-        <Link href="/ideas">
+        <Link href="/teams/new">
           <Button>
             <Plus className="h-4 w-4 mr-2" />
-            아이디어에서 팀 만들기
+            팀 만들기
           </Button>
         </Link>
       </div>
@@ -116,17 +133,20 @@ export default function TeamsPage() {
 
               {/* 액션 버튼 */}
               <div className="flex gap-2 pt-2">
-                <Link href={`/teams/${team.id}`} className="flex-1">
-                  <Button variant="outline" className="w-full">
-                    자세히 보기
-                  </Button>
-                </Link>
+                <Button 
+                  variant="outline" 
+                  className="flex-1"
+                  onClick={() => handleTeamClick(team)}
+                >
+                  자세히 보기
+                </Button>
                 {team.status === '모집중' && team.current_members < team.max_members && (
-                  <Link href={`/teams/${team.id}/join`} className="flex-1">
-                    <Button className="w-full">
-                      참여하기
-                    </Button>
-                  </Link>
+                  <Button 
+                    className="flex-1"
+                    onClick={() => handleTeamClick(team)}
+                  >
+                    참여하기
+                  </Button>
                 )}
               </div>
             </CardContent>
@@ -144,14 +164,22 @@ export default function TeamsPage() {
           <p className="text-gray-600 mb-6">
             첫 번째 팀을 만들어 프로젝트를 시작해보세요
           </p>
-          <Link href="/ideas">
+          <Link href="/teams/new">
             <Button>
               <Plus className="h-4 w-4 mr-2" />
-              아이디어에서 팀 만들기
+              팀 만들기
             </Button>
           </Link>
         </div>
       )}
+
+      {/* Team Detail Modal */}
+      <TeamDetailModal
+        team={selectedTeam}
+        isOpen={modalOpen}
+        onClose={handleModalClose}
+        onTeamUpdated={handleTeamUpdated}
+      />
     </div>
   )
 }

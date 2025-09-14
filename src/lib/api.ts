@@ -218,6 +218,37 @@ export async function joinTeam(teamId: string, skills: string[] = []) {
   return data
 }
 
+export async function getTeamById(teamId: string) {
+  const { data, error } = await supabase
+    .from('teams')
+    .select(`
+      *,
+      ideas (
+        title,
+        domain,
+        problem,
+        ai_solution
+      ),
+      team_members (
+        user_id,
+        role,
+        status,
+        skills
+      )
+    `)
+    .eq('id', teamId)
+    .single()
+
+  if (error) throw error
+
+  const teamWithMembers = data && {
+    ...data,
+    members: (data as any).team_members?.filter((m: any) => m.status === '승인됨') || []
+  }
+
+  return teamWithMembers
+}
+
 // 토큰 관련 API
 export async function getUserTokenBalance() {
   const { data: { user } } = await supabase.auth.getUser()

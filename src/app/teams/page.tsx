@@ -133,13 +133,14 @@ export default function TeamsPage() {
 
               {/* 액션 버튼 */}
               <div className="flex gap-2 pt-2">
-                <Button 
-                  variant="outline" 
-                  className="flex-1"
-                  onClick={() => handleTeamClick(team)}
-                >
-                  자세히 보기
-                </Button>
+                <Link href={`/teams/${team.id}`} className="flex-1">
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                  >
+                    자세히 보기
+                  </Button>
+                </Link>
                 {team.status === '모집중' && team.current_members < team.max_members && (
                   <Button 
                     className="flex-1"

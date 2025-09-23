@@ -18,6 +18,7 @@ export default function IdeasPage() {
   const [ideas, setIdeas] = useState<any[]>([])
   const [visible, setVisible] = useState(12)
   const [loading, setLoading] = useState(false)
+  const [sort, setSort] = useState<'latest' | 'top'>('latest')
   const [investmentModalOpen, setInvestmentModalOpen] = useState(false)
   const [selectedIdea, setSelectedIdea] = useState<any>(null)
   const [tokenBalance, setTokenBalance] = useState(0)
@@ -26,7 +27,10 @@ export default function IdeasPage() {
     try {
       setLoading(true)
       const data = await listIdeas(query)
-      setIdeas(data)
+      const sorted = sort === 'top'
+        ? [...data].sort((a, b) => (b.total_investment || 0) - (a.total_investment || 0))
+        : data
+      setIdeas(sorted)
       setVisible(12)
     } catch (error) {
       console.error("아이디어 로딩 오류:", error)
@@ -50,7 +54,7 @@ export default function IdeasPage() {
   useEffect(() => {
     loadIdeas()
     loadTokenBalance()
-  }, [user])
+  }, [user, sort])
 
   const handleInvestClick = (idea: any) => {
     if (!user) {
@@ -141,8 +145,8 @@ export default function IdeasPage() {
         </Card>
       </div>
 
-      {/* Search */}
-      <div className="flex gap-2">
+      {/* Search & Sort */}
+      <div className="flex gap-2 items-center">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
           <Input
@@ -156,6 +160,25 @@ export default function IdeasPage() {
         <Button onClick={loadIdeas} disabled={loading}>
           {loading ? "검색 중..." : "검색"}
         </Button>
+        <div className="ml-auto text-sm flex items-center gap-2">
+          <span className="text-gray-500">정렬:</span>
+          <Button
+            variant={sort === 'latest' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setSort('latest')}
+            className="h-8"
+          >
+            최신순
+          </Button>
+          <Button
+            variant={sort === 'top' ? 'default' : 'outline'}
+            size="sm"
+            onClick={() => setSort('top')}
+            className="h-8"
+          >
+            투자 많은 순
+          </Button>
+        </div>
       </div>
 
       {/* Ideas Grid */}
@@ -163,14 +186,16 @@ export default function IdeasPage() {
         {visibleIdeas.map((idea) => (
           <Card key={idea.id} className="hover:shadow-lg transition-all duration-200 border-l-4 border-l-blue-200">
             <CardContent className="p-4 space-y-3">
-              <div>
-                <h3 className="font-semibold text-gray-900 line-clamp-2">
-                  {idea.title}
-                </h3>
-                <Badge variant="secondary" className="mt-1 text-xs">
-                  {idea.domain}
-                </Badge>
-              </div>
+              <Link href={`/ideas/detail?ideaId=${idea.id}`}>
+                <div className="cursor-pointer">
+                  <h3 className="font-semibold text-gray-900 line-clamp-2 hover:underline">
+                    {idea.title}
+                  </h3>
+                  <Badge variant="secondary" className="mt-1 text-xs">
+                    {idea.domain}
+                  </Badge>
+                </div>
+              </Link>
 
               <div className="space-y-2 text-sm">
                 <div>

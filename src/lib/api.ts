@@ -39,6 +39,7 @@ export async function listIdeas(query?: string) {
         user_id
       )
     `)
+    .eq('is_visible', true)
     .order('created_at', { ascending: false })
 
   if (query) {
@@ -63,6 +64,33 @@ export async function listIdeas(query?: string) {
   })
   
   return ideasWithInvestments
+}
+
+export async function getIdeaById(ideaId: string) {
+  const { data, error } = await supabase
+    .from('ideas')
+    .select(`
+      *,
+      idea_investments (
+        amount,
+        user_id
+      )
+    `)
+    .eq('id', ideaId)
+    .single()
+
+  if (error) throw error
+
+  const investments = (data as any)?.idea_investments || []
+  const totalInvestment = investments.reduce((sum: number, inv: any) => sum + inv.amount, 0)
+  const investorCount = investments.length
+
+  return {
+    ...data,
+    total_investment: totalInvestment,
+    investor_count: investorCount,
+    investments
+  }
 }
 
 export async function likeIdea(ideaId: string) {
@@ -148,8 +176,14 @@ export async function listTeams() {
         user_id,
         role,
         status
+      ),
+      team_artifacts (
+        image_url,
+        created_at
       )
     `)
+    .order('created_at', { ascending: false, foreignTable: 'team_artifacts' })
+    .limit(1, { foreignTable: 'team_artifacts' })
     .order('created_at', { ascending: false })
 
   if (error) throw error
@@ -157,7 +191,8 @@ export async function listTeams() {
   // 멤버 정보를 정리해서 반환
   const teamsWithMembers = (data || []).map(team => ({
     ...team,
-    members: team.team_members?.filter((member: any) => member.status === '승인됨') || []
+    members: team.team_members?.filter((member: any) => member.status === '승인됨') || [],
+    latest_artifact_image: (team as any).team_artifacts?.[0]?.image_url || null
   }))
   
   return teamsWithMembers
@@ -405,4 +440,101 @@ export async function getUserInvestments() {
 
   if (error) throw error
   return data || []
+}
+
+// 팀 아티팩트 관련 API
+export async function uploadArtifactImage(file: File): Promise<string> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('로그인이 필요합니다')
+
+  const fileExt = file.name.split('.').pop() || 'png'
+  const random = Math.random().toString(36).slice(2)
+  const filePath = `${user.id}/${Date.now()}-${random}.${fileExt}`
+
+  const { error: uploadError } = await supabase.storage.from('artifacts').upload(filePath, file, {
+    cacheControl: '3600',
+    upsert: false,
+  })
+  if (uploadError) throw uploadError
+
+  const { data } = supabase.storage.from('artifacts').getPublicUrl(filePath)
+  return data.publicUrl
+}
+
+export async function addTeamArtifact(params: { team_id: string, image_url?: string, link_url?: string, description?: string }) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('로그인이 필요합니다')
+
+  const { data, error } = await supabase
+    .from('team_artifacts')
+    .insert({
+      team_id: params.team_id,
+      user_id: user.id,
+      image_url: params.image_url || null,
+      link_url: params.link_url || null,
+      description: params.description || null,
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data
+}
+
+export async function listTeamArtifacts(teamId: string) {
+  const { data, error } = await supabase
+    .from('team_artifacts')
+    .select('*')
+    .eq('team_id', teamId)
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return data || []
+}
+
+export async function deleteTeamArtifact(artifactId: string) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('로그인이 필요합니다')
+
+  const { data: artifact, error: fetchError } = await supabase
+    .from('team_artifacts')
+    .select('id, image_url, user_id, team_id')
+    .eq('id', artifactId)
+    .single()
+
+  if (fetchError || !artifact) throw (fetchError || new Error('결과물을 찾을 수 없습니다'))
+
+  // 권한 확인: 소유자 또는 팀장
+  const { data: team } = await supabase
+    .from('teams')
+    .select('leader_id')
+    .eq('id', artifact.team_id as any)
+    .single()
+
+  const isOwner = artifact.user_id === user.id
+  const isLeader = team && (team as any).leader_id === user.id
+  if (!isOwner && !isLeader) {
+    throw new Error('삭제 권한이 없습니다')
+  }
+
+  // Storage 이미지 삭제 (가능한 경우)
+  if (artifact.image_url) {
+    const parts = String(artifact.image_url).split('/artifacts/')
+    if (parts.length === 2) {
+      const storagePath = parts[1]
+      try {
+        await supabase.storage.from('artifacts').remove([storagePath])
+      } catch (e) {
+        // 스토리지 삭제 실패는 무시하고 진행
+      }
+    }
+  }
+
+  const { error: delError } = await supabase
+    .from('team_artifacts')
+    .delete()
+    .eq('id', artifactId)
+
+  if (delError) throw delError
+  return { success: true }
 }

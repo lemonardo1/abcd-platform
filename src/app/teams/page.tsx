@@ -133,7 +133,7 @@ export default function TeamsPage() {
 
               {/* 액션 버튼 */}
               <div className="flex gap-2 pt-2">
-                <Link href={`/teams/${team.id}`} className="flex-1">
+                <Link href={`/teams/detail?teamId=${team.id}`} className="flex-1">
                   <Button 
                     variant="outline" 
                     className="w-full"
@@ -150,6 +150,18 @@ export default function TeamsPage() {
                   </Button>
                 )}
               </div>
+
+              {/* 최신 결과물 이미지 (하단) */}
+              {team.latest_artifact_image && (
+                <div className="pt-3 border-t">
+                  <img
+                    src={team.latest_artifact_image}
+                    alt="최근 팀 결과물"
+                    className="w-full h-40 object-cover rounded-md"
+                    loading="lazy"
+                  />
+                </div>
+              )}
             </CardContent>
           </Card>
         ))}

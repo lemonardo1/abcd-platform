@@ -1,16 +1,30 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Lightbulb, Users, Target, Zap } from "lucide-react"
 import Link from "next/link"
 import { useAuth } from "@/contexts/AuthContext"
 import AuthModal from "@/components/auth/AuthModal"
+import FirstVisitEducation from "@/components/FirstVisitEducation"
 
 export default function HomePage() {
   const { user } = useAuth()
   const [authModalOpen, setAuthModalOpen] = useState(false)
+  const [showEducation, setShowEducation] = useState(false)
+
+  useEffect(() => {
+    try {
+      const seen = typeof window !== 'undefined' && window.localStorage.getItem('firstVisitEducationSeen')
+      if (!seen) {
+        setShowEducation(true)
+        window.localStorage.setItem('firstVisitEducationSeen', 'true')
+      }
+    } catch (e) {
+      // localStorage가 차단된 경우에도 홈은 계속 동작
+    }
+  }, [])
 
   const handleIdeaSubmit = () => {
     if (user) {
@@ -133,6 +147,11 @@ export default function HomePage() {
         isOpen={authModalOpen}
         onClose={() => setAuthModalOpen(false)}
         initialMode="signup"
+      />
+
+      <FirstVisitEducation
+        isOpen={showEducation}
+        onClose={() => setShowEducation(false)}
       />
     </div>
   )

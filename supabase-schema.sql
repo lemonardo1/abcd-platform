@@ -168,3 +168,40 @@ CREATE POLICY "Users can update their own investments" ON idea_investments FOR U
 CREATE INDEX idx_idea_investments_idea_id ON idea_investments(idea_id);
 CREATE INDEX idx_idea_investments_user_id ON idea_investments(user_id);
 CREATE INDEX idx_idea_investments_amount ON idea_investments(amount DESC);
+
+-- 팀 결과물(아티팩트) 테이블
+CREATE TABLE IF NOT EXISTS team_artifacts (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  team_id UUID REFERENCES teams(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  image_url TEXT, -- Supabase Storage public URL
+  link_url TEXT,  -- 외부 사이트 링크
+  description TEXT
+);
+
+-- 팀 결과물 RLS 비활성화 (열림)
+ALTER TABLE team_artifacts DISABLE ROW LEVEL SECURITY;
+
+-- 인덱스
+CREATE INDEX IF NOT EXISTS idx_team_artifacts_team_id ON team_artifacts(team_id);
+CREATE INDEX IF NOT EXISTS idx_team_artifacts_user_id ON team_artifacts(user_id);
+
+-- Supabase Storage: artifacts 버킷 생성 (존재하면 무시)
+INSERT INTO storage.buckets (id, name, public)
+VALUES ('artifacts', 'artifacts', true)
+ON CONFLICT (id) DO NOTHING;
+
+-- Storage 정책: 공개 읽기, 인증 사용자 업로드 허용
+DROP POLICY IF EXISTS "Public read artifacts bucket" ON storage.objects;
+CREATE POLICY "Public read artifacts bucket" ON storage.objects FOR SELECT
+USING (bucket_id = 'artifacts');
+
+DROP POLICY IF EXISTS "Authenticated can upload artifacts" ON storage.objects;
+CREATE POLICY "Authenticated can upload artifacts" ON storage.objects FOR INSERT
+WITH CHECK (bucket_id = 'artifacts' AND auth.role() = 'authenticated');
+
+DROP POLICY IF EXISTS "Authenticated can update own artifacts" ON storage.objects;
+CREATE POLICY "Authenticated can update own artifacts" ON storage.objects FOR UPDATE
+USING (bucket_id = 'artifacts' AND auth.role() = 'authenticated')
+WITH CHECK (bucket_id = 'artifacts' AND auth.role() = 'authenticated');

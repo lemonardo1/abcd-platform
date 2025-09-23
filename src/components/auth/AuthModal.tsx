@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { toast } from 'sonner'
 import { X, Mail, Lock, User } from 'lucide-react'
 import Image from 'next/image'
+import { supabase } from '@/lib/supabase'
 
 interface AuthModalProps {
   isOpen: boolean
@@ -21,6 +22,7 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }: Au
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const { signIn, signUp, signInWithGoogle } = useAuth()
+  const [sendingReset, setSendingReset] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -85,6 +87,25 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }: Au
     setMode(mode === 'login' ? 'signup' : 'login')
     setEmail('')
     setPassword('')
+  }
+
+  const handlePasswordReset = async () => {
+    if (!email.trim()) {
+      toast.error('비밀번호 재설정을 위해 이메일을 입력해주세요.')
+      return
+    }
+    try {
+      setSendingReset(true)
+      await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/reset`
+      })
+      toast.success('재설정 링크가 이메일로 전송되었습니다.')
+    } catch (error: any) {
+      console.error('비밀번호 재설정 메일 오류:', error)
+      toast.error(error?.message || '메일 전송에 실패했습니다.')
+    } finally {
+      setSendingReset(false)
+    }
   }
 
   if (!isOpen) return null
@@ -221,6 +242,19 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }: Au
                 }
               </button>
             </div>
+
+            {mode === 'login' && (
+              <div className="text-center">
+                <button
+                  type="button"
+                  onClick={handlePasswordReset}
+                  className="text-xs text-gray-500 hover:underline"
+                  disabled={loading || sendingReset}
+                >
+                  {sendingReset ? '메일 전송 중...' : '비밀번호를 잊으셨나요? 비밀번호 재설정'}
+                </button>
+              </div>
+            )}
             
             {mode === 'signup' && (
               <div className="text-xs text-gray-500 text-center">

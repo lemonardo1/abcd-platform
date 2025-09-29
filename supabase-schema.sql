@@ -291,3 +291,5 @@ DROP POLICY IF EXISTS "Authenticated can update own artifacts" ON storage.object
 CREATE POLICY "Authenticated can update own artifacts" ON storage.objects FOR UPDATE
 USING (bucket_id = 'artifacts' AND auth.role() = 'authenticated')
 WITH CHECK (bucket_id = 'artifacts' AND auth.role() = 'authenticated');
+
+--

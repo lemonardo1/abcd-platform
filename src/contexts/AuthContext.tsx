@@ -3,13 +3,15 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { User, Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
+import type { Profile, UserRole } from '@/types'
 import { addTokenTransaction } from '@/lib/api'
 
 interface AuthContextType {
   user: User | null
   session: Session | null
   loading: boolean
-  signUp: (email: string, password: string) => Promise<void>
+  profile: Profile | null
+  signUp: (email: string, password: string, fullName: string, schoolName: string, role: UserRole) => Promise<void>
   signIn: (email: string, password: string) => Promise<void>
   signInWithGoogle: () => Promise<void>
   signOut: () => Promise<void>
@@ -21,6 +23,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
+  const [profile, setProfile] = useState<Profile | null>(null)
 
   useEffect(() => {
     // 초기 세션 확인
@@ -43,7 +46,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
-    getSession()
+    const fetchProfile = async (uid: string) => {
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('user_id', uid)
+          .single()
+        setProfile((data as any) || null)
+      } catch (e) {
+        setProfile(null)
+      }
+    }
+
+    const init = async () => {
+      await getSession()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) await fetchProfile(user.id)
+    }
+
+    init()
 
     // 인증 상태 변경 리스너
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -55,10 +77,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.log('사용자가 로그아웃됨')
           setSession(null)
           setUser(null)
+          setProfile(null)
         } else if (event === 'SIGNED_IN') {
           console.log('사용자가 로그인됨:', session?.user?.email)
           setSession(session)
           setUser(session?.user ?? null)
+          if (session?.user?.id) {
+            const { data } = await supabase
+              .from('profiles')
+              .select('*')
+              .eq('user_id', session.user.id)
+              .single()
+            setProfile((data as any) || null)
+          }
         } else {
           setSession(session)
           setUser(session?.user ?? null)
@@ -71,7 +102,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => subscription.unsubscribe()
   }, [])
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string, fullName: string, schoolName: string, role: UserRole) => {
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
@@ -91,6 +122,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } catch (tokenError) {
         console.error('토큰 지급 오류:', tokenError)
         // 토큰 지급 실패해도 회원가입은 성공으로 처리
+      }
+    }
+
+    // 프로필 생성 (이메일 확인 전에도 허용되도록 RLS는 auth.uid() 기반)
+    if (data.user) {
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .upsert({
+          user_id: data.user.id,
+          full_name: fullName,
+          school_name: schoolName,
+          role: role,
+        })
+      if (profileError) {
+        console.error('프로필 생성 오류:', profileError)
+      } else {
+        setProfile({
+          user_id: data.user.id,
+          full_name: fullName,
+          school_name: schoolName,
+          role,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
       }
     }
   }
@@ -158,6 +213,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     user,
     session,
     loading,
+    profile,
     signUp,
     signIn,
     signInWithGoogle,

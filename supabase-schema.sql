@@ -201,6 +201,83 @@ DROP POLICY IF EXISTS "Authenticated can upload artifacts" ON storage.objects;
 CREATE POLICY "Authenticated can upload artifacts" ON storage.objects FOR INSERT
 WITH CHECK (bucket_id = 'artifacts' AND auth.role() = 'authenticated');
 
+-- =============================================
+-- 사용자 프로필 및 교사-학생 연결 스키마 추가
+-- =============================================
+
+-- 프로필 테이블: 사용자 이름, 학교명, 역할 저장
+CREATE TABLE IF NOT EXISTS profiles (
+  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  full_name TEXT NOT NULL,
+  school_name TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('student','teacher')) DEFAULT 'student',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- RLS 활성화
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+-- 본인 프로필 조회/수정/삽입 허용
+CREATE POLICY IF NOT EXISTS "Users can view own profile" ON profiles
+  FOR SELECT USING (auth.uid() = user_id);
+CREATE POLICY IF NOT EXISTS "Users can insert own profile" ON profiles
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+CREATE POLICY IF NOT EXISTS "Users can update own profile" ON profiles
+  FOR UPDATE USING (auth.uid() = user_id);
+
+-- 교사 목록 공개 조회 허용 (교사만 공개)
+CREATE POLICY IF NOT EXISTS "Anyone can view teachers" ON profiles
+  FOR SELECT USING (role = 'teacher');
+
+-- 갱신 시각 자동 갱신 트리거
+CREATE OR REPLACE FUNCTION set_profiles_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_set_profiles_updated_at ON profiles;
+CREATE TRIGGER trigger_set_profiles_updated_at
+  BEFORE UPDATE ON profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION set_profiles_updated_at();
+
+-- 교사-학생 연결 테이블
+CREATE TABLE IF NOT EXISTS teacher_students (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  teacher_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(teacher_id, student_id)
+);
+
+-- RLS 활성화
+ALTER TABLE teacher_students ENABLE ROW LEVEL SECURITY;
+
+-- 학생은 자신의 요청을 생성/조회 가능
+CREATE POLICY IF NOT EXISTS "Students can create link to teacher" ON teacher_students
+  FOR INSERT WITH CHECK (auth.uid() = student_id);
+CREATE POLICY IF NOT EXISTS "Students can view own links" ON teacher_students
+  FOR SELECT USING (auth.uid() = student_id);
+
+-- 교사는 자신의 학생 링크를 조회/승인/거절/삭제 가능
+CREATE POLICY IF NOT EXISTS "Teachers manage own student links (select)" ON teacher_students
+  FOR SELECT USING (auth.uid() = teacher_id);
+CREATE POLICY IF NOT EXISTS "Teachers manage own student links (update)" ON teacher_students
+  FOR UPDATE USING (auth.uid() = teacher_id);
+CREATE POLICY IF NOT EXISTS "Teachers manage own student links (delete)" ON teacher_students
+  FOR DELETE USING (auth.uid() = teacher_id);
+
+-- 인덱스
+CREATE INDEX IF NOT EXISTS idx_profiles_role ON profiles(role);
+CREATE INDEX IF NOT EXISTS idx_profiles_school ON profiles(school_name);
+CREATE INDEX IF NOT EXISTS idx_teacher_students_teacher ON teacher_students(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_teacher_students_student ON teacher_students(student_id);
+
 DROP POLICY IF EXISTS "Authenticated can update own artifacts" ON storage.objects;
 CREATE POLICY "Authenticated can update own artifacts" ON storage.objects FOR UPDATE
 USING (bucket_id = 'artifacts' AND auth.role() = 'authenticated')

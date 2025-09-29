@@ -219,15 +219,19 @@ CREATE TABLE IF NOT EXISTS profiles (
 ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
 
 -- 본인 프로필 조회/수정/삽입 허용
-CREATE POLICY IF NOT EXISTS "Users can view own profile" ON profiles
+DROP POLICY IF EXISTS "Users can view own profile" ON profiles;
+CREATE POLICY "Users can view own profile" ON profiles
   FOR SELECT USING (auth.uid() = user_id);
-CREATE POLICY IF NOT EXISTS "Users can insert own profile" ON profiles
+DROP POLICY IF EXISTS "Users can insert own profile" ON profiles;
+CREATE POLICY "Users can insert own profile" ON profiles
   FOR INSERT WITH CHECK (auth.uid() = user_id);
-CREATE POLICY IF NOT EXISTS "Users can update own profile" ON profiles
+DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
+CREATE POLICY "Users can update own profile" ON profiles
   FOR UPDATE USING (auth.uid() = user_id);
 
 -- 교사 목록 공개 조회 허용 (교사만 공개)
-CREATE POLICY IF NOT EXISTS "Anyone can view teachers" ON profiles
+DROP POLICY IF EXISTS "Anyone can view teachers" ON profiles;
+CREATE POLICY "Anyone can view teachers" ON profiles
   FOR SELECT USING (role = 'teacher');
 
 -- 갱신 시각 자동 갱신 트리거
@@ -259,17 +263,22 @@ CREATE TABLE IF NOT EXISTS teacher_students (
 ALTER TABLE teacher_students ENABLE ROW LEVEL SECURITY;
 
 -- 학생은 자신의 요청을 생성/조회 가능
-CREATE POLICY IF NOT EXISTS "Students can create link to teacher" ON teacher_students
+DROP POLICY IF EXISTS "Students can create link to teacher" ON teacher_students;
+CREATE POLICY "Students can create link to teacher" ON teacher_students
   FOR INSERT WITH CHECK (auth.uid() = student_id);
-CREATE POLICY IF NOT EXISTS "Students can view own links" ON teacher_students
+DROP POLICY IF EXISTS "Students can view own links" ON teacher_students;
+CREATE POLICY "Students can view own links" ON teacher_students
   FOR SELECT USING (auth.uid() = student_id);
 
 -- 교사는 자신의 학생 링크를 조회/승인/거절/삭제 가능
-CREATE POLICY IF NOT EXISTS "Teachers manage own student links (select)" ON teacher_students
+DROP POLICY IF EXISTS "Teachers manage own student links (select)" ON teacher_students;
+CREATE POLICY "Teachers manage own student links (select)" ON teacher_students
   FOR SELECT USING (auth.uid() = teacher_id);
-CREATE POLICY IF NOT EXISTS "Teachers manage own student links (update)" ON teacher_students
+DROP POLICY IF EXISTS "Teachers manage own student links (update)" ON teacher_students;
+CREATE POLICY "Teachers manage own student links (update)" ON teacher_students
   FOR UPDATE USING (auth.uid() = teacher_id);
-CREATE POLICY IF NOT EXISTS "Teachers manage own student links (delete)" ON teacher_students
+DROP POLICY IF EXISTS "Teachers manage own student links (delete)" ON teacher_students;
+CREATE POLICY "Teachers manage own student links (delete)" ON teacher_students
   FOR DELETE USING (auth.uid() = teacher_id);
 
 -- 인덱스

@@ -77,6 +77,9 @@ export default function Navigation() {
             </div>
             
             <div className="flex items-center space-x-4">
+              <Link href="/learn" className="text-gray-700 hover:text-gray-900">
+                학습
+              </Link>
               <Link href="/ideas" className="text-gray-700 hover:text-gray-900">
                 아이디어
               </Link>

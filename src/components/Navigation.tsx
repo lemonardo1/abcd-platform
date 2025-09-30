@@ -106,12 +106,12 @@ export default function Navigation() {
                     </span>
                   </Link>
                   
-                  <div className="flex items-center space-x-2 text-sm text-gray-700">
+                  <Link href="/mypage" className="flex items-center space-x-2 text-sm text-gray-700 hover:text-gray-900">
                     <User className="h-4 w-4" />
-                    <span className="hidden sm:block">
+                    <span className="hidden sm:block underline-offset-2 hover:underline">
                       {profile?.full_name || user.email?.split('@')[0]}
                     </span>
-                  </div>
+                  </Link>
                   {profile?.role === 'teacher' && (
                     <Link href="/teacher" className="text-gray-700 hover:text-gray-900">
                       교사 관리

@@ -7,7 +7,8 @@ import ProtectedRoute from '@/components/ProtectedRoute'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Coins, History, User, CreditCard, TrendingUp, Target } from 'lucide-react'
+import { Coins, History, User, CreditCard, TrendingUp, Target, Copy } from 'lucide-react'
+import { toast } from 'sonner'
 
 interface TokenTransaction {
   id: string
@@ -28,7 +29,7 @@ interface UserInvestment {
 }
 
 export default function MyPage() {
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const [tokenBalance, setTokenBalance] = useState(0)
   const [transactions, setTransactions] = useState<TokenTransaction[]>([])
   const [investments, setInvestments] = useState<UserInvestment[]>([])
@@ -88,6 +89,15 @@ export default function MyPage() {
     }
   }
 
+  const copyToClipboard = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text)
+      toast.success('사용자 ID가 복사되었습니다')
+    } catch (e) {
+      toast.error('복사에 실패했습니다')
+    }
+  }
+
   return (
     <ProtectedRoute>
       <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -113,8 +123,39 @@ export default function MyPage() {
               <CardContent>
                 <div className="space-y-2">
                   <div className="flex justify-between">
+                    <span className="text-gray-600">이름</span>
+                    <span className="font-medium">{profile?.full_name || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">학교</span>
+                    <span className="font-medium">{profile?.school_name || '-'}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-600">역할</span>
+                    <span className="font-medium">{profile?.role === 'teacher' ? '교사' : '학생'}</span>
+                  </div>
+                  <div className="flex justify-between">
                     <span className="text-gray-600">이메일</span>
                     <span className="font-medium">{user?.email}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-gray-600">사용자 ID</span>
+                    <span className="flex items-center gap-2">
+                      <span className="font-mono text-sm text-gray-800 bg-gray-100 px-2 py-0.5 rounded">
+                        {user?.id}
+                      </span>
+                      {user?.id && (
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(user.id!)}
+                          className="inline-flex items-center gap-1 text-sm text-gray-600 hover:text-gray-900"
+                          aria-label="사용자 ID 복사"
+                        >
+                          <Copy className="h-3.5 w-3.5" />
+                          복사
+                        </button>
+                      )}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-600">가입일</span>

@@ -1,4 +1,5 @@
 import { supabase } from './supabase'
+import type { Profile, TeacherStudentLink } from '@/types'
 
 // 아이디어 관련 API
 export async function addIdea(idea: {
@@ -537,4 +538,203 @@ export async function deleteTeamArtifact(artifactId: string) {
 
   if (delError) throw delError
   return { success: true }
+}
+
+// 팀 업데이트 관련 API
+export async function listTeamUpdates(teamId: string, limit = 100) {
+  const { data, error } = await supabase
+    .from('team_updates')
+    .select('*')
+    .eq('team_id', teamId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (error) throw error
+  return data || []
+}
+
+export async function addTeamUpdate(teamId: string, content: string) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('로그인이 필요합니다')
+  const { data, error } = await supabase
+    .from('team_updates')
+    .insert({ team_id: teamId, user_id: user.id, content })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function updateTeamUpdate(updateId: string, content: string) {
+  const { data, error } = await supabase
+    .from('team_updates')
+    .update({ content })
+    .eq('id', updateId)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteTeamUpdate(updateId: string) {
+  const { error } = await supabase
+    .from('team_updates')
+    .delete()
+    .eq('id', updateId)
+  if (error) throw error
+  return { success: true }
+}
+
+// 팀 작업 관련 API
+export async function listTeamTasks(teamId: string, limit = 200) {
+  const { data, error } = await supabase
+    .from('team_tasks')
+    .select('*')
+    .eq('team_id', teamId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return data || []
+}
+
+export async function addTeamTask(teamId: string, title: string) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('로그인이 필요합니다')
+  const { data, error } = await supabase
+    .from('team_tasks')
+    .insert({ team_id: teamId, user_id: user.id, title, done: false })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function toggleTeamTask(taskId: string, done: boolean) {
+  const { data, error } = await supabase
+    .from('team_tasks')
+    .update({ done })
+    .eq('id', taskId)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteTeamTask(taskId: string) {
+  const { error } = await supabase
+    .from('team_tasks')
+    .delete()
+    .eq('id', taskId)
+  if (error) throw error
+  return { success: true }
+}
+
+// ============= 교사/학생 프로필 및 연결 관련 API =============
+
+export async function upsertMyProfile(params: { full_name: string; school_name: string; role: 'student' | 'teacher' }): Promise<Profile> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('로그인이 필요합니다')
+
+  const { data, error } = await supabase
+    .from('profiles')
+    .upsert({
+      user_id: user.id,
+      full_name: params.full_name,
+      school_name: params.school_name,
+      role: params.role,
+    })
+    .select()
+    .single()
+
+  if (error) throw error
+  return data as unknown as Profile
+}
+
+export async function getMyProfile(): Promise<Profile | null> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+  const { data } = await supabase
+    .from('profiles')
+    .select('*')
+    .eq('user_id', user.id)
+    .single()
+  return (data as any) || null
+}
+
+export async function searchTeachersBySchool(schoolQuery: string): Promise<Profile[]> {
+  const { data, error } = await supabase
+    .from('profiles')
+    .select('user_id, full_name, school_name, role')
+    .eq('role', 'teacher')
+    .ilike('school_name', `%${schoolQuery}%`)
+    .order('full_name', { ascending: true })
+  if (error) throw error
+  return (data as any) || []
+}
+
+export async function requestLinkToTeacher(teacherUserId: string): Promise<TeacherStudentLink> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('로그인이 필요합니다')
+  const { data, error } = await supabase
+    .from('teacher_students')
+    .insert({
+      teacher_id: teacherUserId,
+      student_id: user.id,
+      status: 'pending'
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data as any
+}
+
+export async function listMyStudentLinks(): Promise<TeacherStudentLink[]> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('로그인이 필요합니다')
+  const { data, error } = await supabase
+    .from('teacher_students')
+    .select('*')
+    .eq('student_id', user.id)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  return (data as any) || []
+}
+
+export async function listMyTeacherRequests(): Promise<(TeacherStudentLink & { student_profile?: Profile })[]> {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('로그인이 필요합니다')
+  const { data, error } = await supabase
+    .from('teacher_students')
+    .select('*, profiles:student_id ( full_name, school_name, role, user_id )')
+    .eq('teacher_id', user.id)
+    .order('created_at', { ascending: false })
+  if (error) throw error
+  const result = (data as any[]).map((row) => ({
+    ...(row as any),
+    student_profile: row.profiles ? {
+      user_id: row.profiles.user_id,
+      full_name: row.profiles.full_name,
+      school_name: row.profiles.school_name,
+      role: row.profiles.role,
+      created_at: '',
+      updated_at: '',
+    } as Profile : undefined
+  }))
+  return result
+}
+
+export async function approveStudentLink(linkId: string): Promise<void> {
+  const { error } = await supabase
+    .from('teacher_students')
+    .update({ status: 'approved' })
+    .eq('id', linkId)
+  if (error) throw error
+}
+
+export async function rejectStudentLink(linkId: string): Promise<void> {
+  const { error } = await supabase
+    .from('teacher_students')
+    .update({ status: 'rejected' })
+    .eq('id', linkId)
+  if (error) throw error
 }

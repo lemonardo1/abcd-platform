@@ -9,6 +9,7 @@ import { toast } from 'sonner'
 import { X, Mail, Lock, User } from 'lucide-react'
 import Image from 'next/image'
 import { supabase } from '@/lib/supabase'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
 interface AuthModalProps {
   isOpen: boolean
@@ -23,6 +24,9 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }: Au
   const [loading, setLoading] = useState(false)
   const { signIn, signUp, signInWithGoogle } = useAuth()
   const [sendingReset, setSendingReset] = useState(false)
+  const [fullName, setFullName] = useState('')
+  const [schoolName, setSchoolName] = useState('')
+  const [role, setRole] = useState<'student' | 'teacher'>('student')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -44,13 +48,20 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }: Au
         await signIn(email, password)
         toast.success('로그인 성공!')
       } else {
-        await signUp(email, password)
+        if (!fullName.trim() || !schoolName.trim()) {
+          toast.error('이름과 학교명을 입력해주세요.')
+          return
+        }
+        await signUp(email, password, fullName, schoolName, role)
         toast.success('회원가입 성공! 이메일을 확인해주세요.')
       }
       
       onClose()
       setEmail('')
       setPassword('')
+      setFullName('')
+      setSchoolName('')
+      setRole('student')
     } catch (error: any) {
       console.error('인증 오류:', error)
       
@@ -87,6 +98,9 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }: Au
     setMode(mode === 'login' ? 'signup' : 'login')
     setEmail('')
     setPassword('')
+    setFullName('')
+    setSchoolName('')
+    setRole('student')
   }
 
   const handlePasswordReset = async () => {
@@ -139,6 +153,50 @@ export default function AuthModal({ isOpen, onClose, initialMode = 'login' }: Au
           
           <CardContent className="space-y-4">
             <form onSubmit={handleSubmit} className="space-y-4">
+              {mode === 'signup' && (
+                <>
+                  <div>
+                    <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 mb-1">
+                      이름
+                    </label>
+                    <Input
+                      id="fullName"
+                      type="text"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      placeholder="홍길동"
+                      disabled={loading}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="schoolName" className="block text-sm font-medium text-gray-700 mb-1">
+                      학교명
+                    </label>
+                    <Input
+                      id="schoolName"
+                      type="text"
+                      value={schoolName}
+                      onChange={(e) => setSchoolName(e.target.value)}
+                      placeholder="ABCD 고등학교"
+                      disabled={loading}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">역할</label>
+                    <Select value={role} onValueChange={(v) => setRole(v as any)}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="역할 선택" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="student">학생</SelectItem>
+                        <SelectItem value="teacher">교사</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </>
+              )}
               <div>
                 <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
                   이메일

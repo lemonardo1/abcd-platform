@@ -10,7 +10,7 @@ import { toast } from 'sonner'
 import { getUserTokenBalance } from '@/lib/api'
 
 export default function Navigation() {
-  const { user, signOut, loading } = useAuth()
+  const { user, profile, signOut, loading } = useAuth()
   const [authModalOpen, setAuthModalOpen] = useState(false)
   const [authMode, setAuthMode] = useState<'login' | 'signup'>('login')
   const [isSigningOut, setIsSigningOut] = useState(false)
@@ -77,6 +77,9 @@ export default function Navigation() {
             </div>
             
             <div className="flex items-center space-x-4">
+              <Link href="/learn" className="text-gray-700 hover:text-gray-900">
+                학습
+              </Link>
               <Link href="/ideas" className="text-gray-700 hover:text-gray-900">
                 아이디어
               </Link>
@@ -103,12 +106,17 @@ export default function Navigation() {
                     </span>
                   </Link>
                   
-                  <div className="flex items-center space-x-2 text-sm text-gray-700">
+                  <Link href="/mypage" className="flex items-center space-x-2 text-sm text-gray-700 hover:text-gray-900">
                     <User className="h-4 w-4" />
-                    <span className="hidden sm:block">
-                      {user.email?.split('@')[0]}
+                    <span className="hidden sm:block underline-offset-2 hover:underline">
+                      {profile?.full_name || user.email?.split('@')[0]}
                     </span>
-                  </div>
+                  </Link>
+                  {profile?.role === 'teacher' && (
+                    <Link href="/teacher" className="text-gray-700 hover:text-gray-900">
+                      교사 관리
+                    </Link>
+                  )}
                   <Button
                     variant="outline"
                     size="sm"

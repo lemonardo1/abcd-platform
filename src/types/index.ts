@@ -5,6 +5,25 @@ export interface User {
   created_at: string
 }
 
+export type UserRole = 'student' | 'teacher'
+
+export interface Profile {
+  user_id: string
+  full_name: string
+  school_name: string
+  role: UserRole
+  created_at: string
+  updated_at: string
+}
+
+export interface TeacherStudentLink {
+  id: string
+  teacher_id: string
+  student_id: string
+  status: 'pending' | 'approved' | 'rejected'
+  created_at: string
+}
+
 // 아이디어 관련 타입
 export interface Idea {
   id: string

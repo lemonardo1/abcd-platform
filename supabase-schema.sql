@@ -201,7 +201,238 @@ DROP POLICY IF EXISTS "Authenticated can upload artifacts" ON storage.objects;
 CREATE POLICY "Authenticated can upload artifacts" ON storage.objects FOR INSERT
 WITH CHECK (bucket_id = 'artifacts' AND auth.role() = 'authenticated');
 
+-- =============================================
+-- 사용자 프로필 및 교사-학생 연결 스키마 추가
+-- =============================================
+
+-- 프로필 테이블: 사용자 이름, 학교명, 역할 저장
+CREATE TABLE IF NOT EXISTS profiles (
+  user_id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
+  full_name TEXT NOT NULL,
+  school_name TEXT NOT NULL,
+  role TEXT NOT NULL CHECK (role IN ('student','teacher')) DEFAULT 'student',
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- RLS 활성화
+ALTER TABLE profiles ENABLE ROW LEVEL SECURITY;
+
+-- 본인 프로필 조회/수정/삽입 허용
+DROP POLICY IF EXISTS "Users can view own profile" ON profiles;
+CREATE POLICY "Users can view own profile" ON profiles
+  FOR SELECT USING (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can insert own profile" ON profiles;
+CREATE POLICY "Users can insert own profile" ON profiles
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+DROP POLICY IF EXISTS "Users can update own profile" ON profiles;
+CREATE POLICY "Users can update own profile" ON profiles
+  FOR UPDATE USING (auth.uid() = user_id);
+
+-- 교사 목록 공개 조회 허용 (교사만 공개)
+DROP POLICY IF EXISTS "Anyone can view teachers" ON profiles;
+CREATE POLICY "Anyone can view teachers" ON profiles
+  FOR SELECT USING (role = 'teacher');
+
+-- 갱신 시각 자동 갱신 트리거
+CREATE OR REPLACE FUNCTION set_profiles_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trigger_set_profiles_updated_at ON profiles;
+CREATE TRIGGER trigger_set_profiles_updated_at
+  BEFORE UPDATE ON profiles
+  FOR EACH ROW
+  EXECUTE FUNCTION set_profiles_updated_at();
+
+-- 교사-학생 연결 테이블
+CREATE TABLE IF NOT EXISTS teacher_students (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  teacher_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  student_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','rejected')),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  UNIQUE(teacher_id, student_id)
+);
+
+-- RLS 활성화
+ALTER TABLE teacher_students ENABLE ROW LEVEL SECURITY;
+
+-- 학생은 자신의 요청을 생성/조회 가능
+DROP POLICY IF EXISTS "Students can create link to teacher" ON teacher_students;
+CREATE POLICY "Students can create link to teacher" ON teacher_students
+  FOR INSERT WITH CHECK (auth.uid() = student_id);
+DROP POLICY IF EXISTS "Students can view own links" ON teacher_students;
+CREATE POLICY "Students can view own links" ON teacher_students
+  FOR SELECT USING (auth.uid() = student_id);
+
+-- 교사는 자신의 학생 링크를 조회/승인/거절/삭제 가능
+DROP POLICY IF EXISTS "Teachers manage own student links (select)" ON teacher_students;
+CREATE POLICY "Teachers manage own student links (select)" ON teacher_students
+  FOR SELECT USING (auth.uid() = teacher_id);
+DROP POLICY IF EXISTS "Teachers manage own student links (update)" ON teacher_students;
+CREATE POLICY "Teachers manage own student links (update)" ON teacher_students
+  FOR UPDATE USING (auth.uid() = teacher_id);
+DROP POLICY IF EXISTS "Teachers manage own student links (delete)" ON teacher_students;
+CREATE POLICY "Teachers manage own student links (delete)" ON teacher_students
+  FOR DELETE USING (auth.uid() = teacher_id);
+
+-- 인덱스
+CREATE INDEX IF NOT EXISTS idx_profiles_role ON profiles(role);
+CREATE INDEX IF NOT EXISTS idx_profiles_school ON profiles(school_name);
+CREATE INDEX IF NOT EXISTS idx_teacher_students_teacher ON teacher_students(teacher_id);
+CREATE INDEX IF NOT EXISTS idx_teacher_students_student ON teacher_students(student_id);
+
 DROP POLICY IF EXISTS "Authenticated can update own artifacts" ON storage.objects;
 CREATE POLICY "Authenticated can update own artifacts" ON storage.objects FOR UPDATE
 USING (bucket_id = 'artifacts' AND auth.role() = 'authenticated')
 WITH CHECK (bucket_id = 'artifacts' AND auth.role() = 'authenticated');
+
+--
+
+-- =============================================
+-- 팀 활동(업데이트/작업) 스키마 추가
+-- =============================================
+
+-- 팀 업데이트 테이블
+CREATE TABLE IF NOT EXISTS team_updates (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  team_id UUID REFERENCES teams(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  content TEXT NOT NULL
+);
+
+ALTER TABLE team_updates ENABLE ROW LEVEL SECURITY;
+
+-- 팀 업데이트 정책: 팀원(승인됨) 또는 팀장에게 공개, 본인/팀장만 수정/삭제, 팀원만 작성
+DROP POLICY IF EXISTS "Team members can view team_updates" ON team_updates;
+CREATE POLICY "Team members can view team_updates" ON team_updates
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM team_members m
+      WHERE m.team_id = team_updates.team_id
+        AND m.user_id = auth.uid()
+        AND m.status = '승인됨'
+    )
+    OR EXISTS (
+      SELECT 1 FROM teams t
+      WHERE t.id = team_updates.team_id
+        AND t.leader_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS "Team members can insert team_updates" ON team_updates;
+CREATE POLICY "Team members can insert team_updates" ON team_updates
+  FOR INSERT WITH CHECK (
+    auth.uid() = user_id AND (
+      EXISTS (
+        SELECT 1 FROM team_members m
+        WHERE m.team_id = team_updates.team_id
+          AND m.user_id = auth.uid()
+          AND m.status = '승인됨'
+      )
+      OR EXISTS (
+        SELECT 1 FROM teams t
+        WHERE t.id = team_updates.team_id
+          AND t.leader_id = auth.uid()
+      )
+    )
+  );
+
+DROP POLICY IF EXISTS "Owners or leader can update team_updates" ON team_updates;
+CREATE POLICY "Owners or leader can update team_updates" ON team_updates
+  FOR UPDATE USING (
+    auth.uid() = user_id OR EXISTS (
+      SELECT 1 FROM teams t
+      WHERE t.id = team_updates.team_id
+        AND t.leader_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS "Owners or leader can delete team_updates" ON team_updates;
+CREATE POLICY "Owners or leader can delete team_updates" ON team_updates
+  FOR DELETE USING (
+    auth.uid() = user_id OR EXISTS (
+      SELECT 1 FROM teams t
+      WHERE t.id = team_updates.team_id
+        AND t.leader_id = auth.uid()
+    )
+  );
+
+CREATE INDEX IF NOT EXISTS idx_team_updates_team_id ON team_updates(team_id);
+CREATE INDEX IF NOT EXISTS idx_team_updates_created_at ON team_updates(created_at DESC);
+
+-- 팀 작업(할 일) 테이블
+CREATE TABLE IF NOT EXISTS team_tasks (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  team_id UUID REFERENCES teams(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  title TEXT NOT NULL,
+  done BOOLEAN NOT NULL DEFAULT false
+);
+
+ALTER TABLE team_tasks ENABLE ROW LEVEL SECURITY;
+
+-- 팀 작업 정책: 조회는 팀원/팀장, 생성은 팀원/팀장, 수정/삭제는 작성자 또는 팀장
+DROP POLICY IF EXISTS "Team members can view team_tasks" ON team_tasks;
+CREATE POLICY "Team members can view team_tasks" ON team_tasks
+  FOR SELECT USING (
+    EXISTS (
+      SELECT 1 FROM team_members m
+      WHERE m.team_id = team_tasks.team_id
+        AND m.user_id = auth.uid()
+        AND m.status = '승인됨'
+    )
+    OR EXISTS (
+      SELECT 1 FROM teams t
+      WHERE t.id = team_tasks.team_id
+        AND t.leader_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS "Team members can insert team_tasks" ON team_tasks;
+CREATE POLICY "Team members can insert team_tasks" ON team_tasks
+  FOR INSERT WITH CHECK (
+    auth.uid() = user_id AND (
+      EXISTS (
+        SELECT 1 FROM team_members m
+        WHERE m.team_id = team_tasks.team_id
+          AND m.user_id = auth.uid()
+          AND m.status = '승인됨'
+      )
+      OR EXISTS (
+        SELECT 1 FROM teams t
+        WHERE t.id = team_tasks.team_id
+          AND t.leader_id = auth.uid()
+      )
+    )
+  );
+
+DROP POLICY IF EXISTS "Owners or leader can update team_tasks" ON team_tasks;
+CREATE POLICY "Owners or leader can update team_tasks" ON team_tasks
+  FOR UPDATE USING (
+    auth.uid() = user_id OR EXISTS (
+      SELECT 1 FROM teams t
+      WHERE t.id = team_tasks.team_id
+        AND t.leader_id = auth.uid()
+    )
+  );
+
+DROP POLICY IF EXISTS "Owners or leader can delete team_tasks" ON team_tasks;
+CREATE POLICY "Owners or leader can delete team_tasks" ON team_tasks
+  FOR DELETE USING (
+    auth.uid() = user_id OR EXISTS (
+      SELECT 1 FROM teams t
+      WHERE t.id = team_tasks.team_id
+        AND t.leader_id = auth.uid()
+    )
+  );
+
+CREATE INDEX IF NOT EXISTS idx_team_tasks_team_id ON team_tasks(team_id);
+CREATE INDEX IF NOT EXISTS idx_team_tasks_created_at ON team_tasks(created_at DESC);

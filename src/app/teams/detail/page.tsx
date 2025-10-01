@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState, useRef } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
-import { getTeamById, joinTeam, listTeamArtifacts, addTeamArtifact, uploadArtifactImage, deleteTeamArtifact } from "@/lib/api"
+import { getTeamById, joinTeam, listTeamArtifacts, addTeamArtifact, uploadArtifactImage, deleteTeamArtifact, listTeamUpdates, addTeamUpdate, deleteTeamUpdate, listTeamTasks, addTeamTask, toggleTeamTask, deleteTeamTask } from "@/lib/api"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -24,8 +24,8 @@ export default function TeamDetailByQueryPage() {
   const [joining, setJoining] = useState(false)
   const [newUpdate, setNewUpdate] = useState("")
   const [newTask, setNewTask] = useState("")
-  const [updates, setUpdates] = useState<Array<{ id: string, content: string, createdAt: string }>>([])
-  const [tasks, setTasks] = useState<Array<{ id: string, title: string, done: boolean, createdAt: string }>>([])
+  const [updates, setUpdates] = useState<Array<{ id: string, content: string, created_at: string, user_id?: string }>>([])
+  const [tasks, setTasks] = useState<Array<{ id: string, title: string, done: boolean, created_at: string, user_id?: string }>>([])
   const [artifacts, setArtifacts] = useState<any[]>([])
   const [artifactImage, setArtifactImage] = useState<File | null>(null)
   const [artifactLink, setArtifactLink] = useState("")
@@ -60,26 +60,23 @@ export default function TeamDetailByQueryPage() {
     load()
   }, [teamId])
 
-  // 활동 탭: 로컬 스토리지 동기화
+  // 활동 탭: 백엔드 동기화
   useEffect(() => {
-    if (!teamId) return
-    try {
-      const raw = localStorage.getItem(`team_activity_${teamId}`)
-      if (raw) {
-        const parsed = JSON.parse(raw)
-        setUpdates(Array.isArray(parsed.updates) ? parsed.updates : [])
-        setTasks(Array.isArray(parsed.tasks) ? parsed.tasks : [])
+    const loadActivity = async () => {
+      if (!teamId) return
+      try {
+        const [u, t] = await Promise.all([
+          listTeamUpdates(String(teamId)),
+          listTeamTasks(String(teamId))
+        ])
+        setUpdates(u as any)
+        setTasks(t as any)
+      } catch (e) {
+        // 조용히 무시
       }
-    } catch (e) {
-      // ignore
     }
+    loadActivity()
   }, [teamId])
-
-  useEffect(() => {
-    if (!teamId) return
-    const data = JSON.stringify({ updates, tasks })
-    localStorage.setItem(`team_activity_${teamId}`, data)
-  }, [teamId, updates, tasks])
 
   // 결과물 목록 로드
   useEffect(() => {
@@ -95,28 +92,46 @@ export default function TeamDetailByQueryPage() {
     loadArtifacts()
   }, [teamId])
 
-  const handleAddUpdate = () => {
+  const handleAddUpdate = async () => {
     const value = newUpdate.trim()
-    if (!value) return
-    const item = { id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`, content: value, createdAt: new Date().toISOString() }
-    setUpdates([item, ...updates])
-    setNewUpdate("")
+    if (!value || !teamId) return
+    try {
+      const created = await addTeamUpdate(String(teamId), value)
+      setUpdates([created as any, ...updates])
+      setNewUpdate("")
+    } catch (error: any) {
+      toast.error(error?.message || "등록에 실패했습니다")
+    }
   }
 
-  const handleAddTask = () => {
+  const handleAddTask = async () => {
     const value = newTask.trim()
-    if (!value) return
-    const item = { id: crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random()}`, title: value, done: false, createdAt: new Date().toISOString() }
-    setTasks([item, ...tasks])
-    setNewTask("")
+    if (!value || !teamId) return
+    try {
+      const created = await addTeamTask(String(teamId), value)
+      setTasks([created as any, ...tasks])
+      setNewTask("")
+    } catch (error: any) {
+      toast.error(error?.message || "작업 추가에 실패했습니다")
+    }
   }
 
-  const toggleTask = (id: string) => {
-    setTasks(tasks.map(t => t.id === id ? { ...t, done: !t.done } : t))
+  const toggleTaskChecked = async (id: string, done: boolean) => {
+    try {
+      const updated = await toggleTeamTask(id, done)
+      setTasks(tasks.map(t => t.id === id ? (updated as any) : t))
+    } catch (error: any) {
+      toast.error(error?.message || "상태 변경에 실패했습니다")
+    }
   }
 
-  const removeTask = (id: string) => {
-    setTasks(tasks.filter(t => t.id !== id))
+  const removeTask = async (id: string) => {
+    try {
+      await deleteTeamTask(id)
+      setTasks(tasks.filter(t => t.id !== id))
+    } catch (error: any) {
+      toast.error(error?.message || "삭제에 실패했습니다")
+    }
   }
 
   const handleSubmitArtifact = async () => {
@@ -366,6 +381,13 @@ export default function TeamDetailByQueryPage() {
                       placeholder="팀 진행 상황이나 공지사항을 작성하세요"
                       rows={4}
                       maxLength={1000}
+                      onKeyDown={(e) => {
+                        const isMetaEnter = (e.key === 'Enter' && (e.metaKey || e.ctrlKey))
+                        if (isMetaEnter) {
+                          e.preventDefault()
+                          handleAddUpdate()
+                        }
+                      }}
                     />
                     <div className="flex justify-end">
                       <Button onClick={handleAddUpdate} disabled={!newUpdate.trim()}>등록</Button>
@@ -378,7 +400,7 @@ export default function TeamDetailByQueryPage() {
                     {updates.map((u) => (
                       <div key={u.id} className="p-3 bg-gray-50 rounded-lg">
                         <div className="text-sm whitespace-pre-wrap text-gray-800">{u.content}</div>
-                        <div className="text-xs text-gray-500 mt-2">{new Date(u.createdAt).toLocaleString('ko-KR')}</div>
+                        <div className="text-xs text-gray-500 mt-2">{new Date(u.created_at).toLocaleString('ko-KR')}</div>
                       </div>
                     ))}
                   </div>
@@ -411,13 +433,13 @@ export default function TeamDetailByQueryPage() {
                           <input
                             type="checkbox"
                             className="h-4 w-4"
-                            checked={t.done}
-                            onChange={() => toggleTask(t.id)}
+                          checked={t.done}
+                          onChange={() => toggleTaskChecked(t.id, !t.done)}
                           />
                           <span className={`text-sm ${t.done ? 'line-through text-gray-400' : 'text-gray-800'}`}>{t.title}</span>
                         </label>
                         <div className="flex items-center gap-2">
-                          <span className="text-xs text-gray-400">{new Date(t.createdAt).toLocaleDateString('ko-KR')}</span>
+                          <span className="text-xs text-gray-400">{new Date(t.created_at).toLocaleDateString('ko-KR')}</span>
                           <Button variant="ghost" size="sm" onClick={() => removeTask(t.id)}>삭제</Button>
                         </div>
                       </div>

@@ -8,6 +8,55 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey)
 export type Database = {
   public: {
     Tables: {
+      profiles: {
+        Row: {
+          user_id: string
+          full_name: string
+          school_name: string
+          role: 'student' | 'teacher'
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          full_name: string
+          school_name: string
+          role?: 'student' | 'teacher'
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          full_name?: string
+          school_name?: string
+          role?: 'student' | 'teacher'
+          created_at?: string
+          updated_at?: string
+        }
+      }
+      teacher_students: {
+        Row: {
+          id: string
+          teacher_id: string
+          student_id: string
+          status: 'pending' | 'approved' | 'rejected'
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          teacher_id: string
+          student_id: string
+          status?: 'pending' | 'approved' | 'rejected'
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          teacher_id?: string
+          student_id?: string
+          status?: 'pending' | 'approved' | 'rejected'
+          created_at?: string
+        }
+      }
       ideas: {
         Row: {
           id: string
@@ -111,6 +160,35 @@ export type Database = {
           role?: string
           skills?: string[]
           status?: string
+        }
+      }
+      team_artifacts: {
+        Row: {
+          id: string
+          created_at: string
+          team_id: string
+          user_id: string
+          image_url: string | null
+          link_url: string | null
+          description: string | null
+        }
+        Insert: {
+          id?: string
+          created_at?: string
+          team_id: string
+          user_id: string
+          image_url?: string | null
+          link_url?: string | null
+          description?: string | null
+        }
+        Update: {
+          id?: string
+          created_at?: string
+          team_id?: string
+          user_id?: string
+          image_url?: string | null
+          link_url?: string | null
+          description?: string | null
         }
       }
       user_tokens: {

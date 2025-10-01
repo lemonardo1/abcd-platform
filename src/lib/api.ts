@@ -540,6 +540,95 @@ export async function deleteTeamArtifact(artifactId: string) {
   return { success: true }
 }
 
+// 팀 업데이트 관련 API
+export async function listTeamUpdates(teamId: string, limit = 100) {
+  const { data, error } = await supabase
+    .from('team_updates')
+    .select('*')
+    .eq('team_id', teamId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (error) throw error
+  return data || []
+}
+
+export async function addTeamUpdate(teamId: string, content: string) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('로그인이 필요합니다')
+  const { data, error } = await supabase
+    .from('team_updates')
+    .insert({ team_id: teamId, user_id: user.id, content })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function updateTeamUpdate(updateId: string, content: string) {
+  const { data, error } = await supabase
+    .from('team_updates')
+    .update({ content })
+    .eq('id', updateId)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteTeamUpdate(updateId: string) {
+  const { error } = await supabase
+    .from('team_updates')
+    .delete()
+    .eq('id', updateId)
+  if (error) throw error
+  return { success: true }
+}
+
+// 팀 작업 관련 API
+export async function listTeamTasks(teamId: string, limit = 200) {
+  const { data, error } = await supabase
+    .from('team_tasks')
+    .select('*')
+    .eq('team_id', teamId)
+    .order('created_at', { ascending: false })
+    .limit(limit)
+  if (error) throw error
+  return data || []
+}
+
+export async function addTeamTask(teamId: string, title: string) {
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) throw new Error('로그인이 필요합니다')
+  const { data, error } = await supabase
+    .from('team_tasks')
+    .insert({ team_id: teamId, user_id: user.id, title, done: false })
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function toggleTeamTask(taskId: string, done: boolean) {
+  const { data, error } = await supabase
+    .from('team_tasks')
+    .update({ done })
+    .eq('id', taskId)
+    .select()
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteTeamTask(taskId: string) {
+  const { error } = await supabase
+    .from('team_tasks')
+    .delete()
+    .eq('id', taskId)
+  if (error) throw error
+  return { success: true }
+}
+
 // ============= 교사/학생 프로필 및 연결 관련 API =============
 
 export async function upsertMyProfile(params: { full_name: string; school_name: string; role: 'student' | 'teacher' }): Promise<Profile> {
